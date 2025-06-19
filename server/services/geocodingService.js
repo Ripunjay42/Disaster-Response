@@ -75,6 +75,13 @@ export const geocodeLocation = async (locationName) => {
     // Check if we got a valid result
     if (response.data && response.data.features && response.data.features.length > 0) {
       const location = response.data.features[0];
+      
+      // Ensure coordinates are valid numbers
+      if (!Array.isArray(location.center) || location.center.length < 2 || 
+          typeof location.center[0] !== 'number' || typeof location.center[1] !== 'number') {
+        throw new Error('Invalid coordinates in geocoding response');
+      }
+      
       const result = {
         longitude: location.center[0],
         latitude: location.center[1],
@@ -90,7 +97,23 @@ export const geocodeLocation = async (locationName) => {
     
     throw new Error('Location not found');
   } catch (error) {
-    console.error('Geocoding error:', error.message);
-    throw new Error(`Geocoding failed: ${error.message}`);
+    // More detailed error logging
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.error('Geocoding API error:', {
+        status: error.response.status,
+        data: error.response.data
+      });
+      throw new Error(`Geocoding failed: API error ${error.response.status}`);
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('Geocoding request error - no response received');
+      throw new Error('Geocoding failed: No response from service');
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.error('Geocoding error:', error.message);
+      throw new Error(`Geocoding failed: ${error.message}`);
+    }
   }
 };

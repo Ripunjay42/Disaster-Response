@@ -1,5 +1,6 @@
 import { Report, Disaster } from '../models/index.js';
 import { verifyImage } from '../services/geminiService.js';
+import { formatAsUUID } from '../utils/uuidHelper.js';
 
 // Create a new report
 export const createReport = async (req, res) => {
@@ -15,12 +16,10 @@ export const createReport = async (req, res) => {
     const disaster = await Disaster.findByPk(disaster_id);
     if (!disaster) {
       return res.status(404).json({ error: 'Disaster not found' });
-    }
-    
-    // Create the report with pending verification status
+    }    // Create the report with pending verification status
     const report = await Report.create({
       disaster_id,
-      user_id: req.user.id,
+      user_id: formatAsUUID(req.user.id),
       content,
       image_url: image_url || null,
       verification_status: image_url ? 'pending' : 'not_applicable'

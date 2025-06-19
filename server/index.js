@@ -19,16 +19,30 @@ dotenv.config();
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
-  cors: { origin: '*' }
+  cors: { origin: 'http://localhost:5173' }
 });
+
+
+// Updated CORS configuration
+const allowedOrigins = ['http://localhost:5173'];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  credentials: true,
+}));
 
 // Store io instance for use in controllers
 app.set('io', io);
 
-// Middleware
-app.use(cors());
+// Middleware - using specific CORS config from above
 app.use(express.json());
-app.use(helmet()); // Security headers
+app.use(helmet({ contentSecurityPolicy: false })); // Security headers with CSP disabled for development
 app.use(morgan('combined')); // HTTP request logging
 
 // Basic rate limiting
@@ -86,17 +100,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  logger.error('Unhandled error', { error: err.message, stack: err.stack });
-  res.status(500).json({ error: 'Internal server error' });
-});
-
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/disasters', disasterRoutes);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/reports', reportRoutes);
+
+// Error handling middleware - must come after routes
+app.use((err, req, res, next) => {
+  logger.error('Unhandled error', { 
+    error: err.message || 'Unknown error',
+    stack: err.stack || 'No stack trace', 
+    path: req.path,
+    method: req.method
+  });
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 // Base route
 app.get('/', (req, res) => {

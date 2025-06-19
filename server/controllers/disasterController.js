@@ -4,6 +4,7 @@ import { extractLocationFromText } from '../services/geminiService.js';
 import { getMockSocialMediaPosts } from '../services/socialMediaService.js';
 import { getOfficialUpdates } from '../services/updateService.js';
 import { verifyImage } from '../services/geminiService.js';
+import { formatAsUUID } from '../utils/uuidHelper.js';
 import { Op } from 'sequelize';
 import { sequelize } from '../models/index.js';
 
@@ -12,14 +13,27 @@ export const createDisaster = async (req, res) => {
   try {
     const { title, location_name, description, tags = [] } = req.body;
     
+    // Validate required fields
+    if (!title || !description) {
+      return res.status(400).json({ error: 'Title and description are required' });
+    }
+    
     // Extract location if not provided
     let locationNameToUse = location_name;
     if (!locationNameToUse && description) {
-      const extractedLocation = await extractLocationFromText(description);
-      locationNameToUse = extractedLocation.location;
-      if (locationNameToUse === 'Unknown location') {
-        return res.status(400).json({ error: 'Could not extract location from description' });
+      try {
+        const extractedLocation = await extractLocationFromText(description);
+        locationNameToUse = extractedLocation.location;
+        if (locationNameToUse === 'Unknown location') {
+          return res.status(400).json({ error: 'Could not extract location from description. Please provide a location name.' });
+        }
+      } catch (error) {
+        return res.status(400).json({ error: `Failed to extract location: ${error.message}` });
       }
+    }
+    
+    if (!locationNameToUse) {
+      return res.status(400).json({ error: 'Location name is required' });
     }
     
     // Geocode the location
@@ -31,20 +45,19 @@ export const createDisaster = async (req, res) => {
         coordinates: [geocodedLocation.longitude, geocodedLocation.latitude]
       };
     } catch (error) {
+      console.error('Geocoding error:', error);
       return res.status(400).json({ error: `Geocoding failed: ${error.message}` });
-    }
-    
-    // Create the disaster record
+    }    // Create the disaster record
     const disaster = await Disaster.create({
       title,
       location_name: locationNameToUse,
       location: coordinates,
       description,
-      tags: tags || [],
-      owner_id: req.user.id,
+      tags: Array.isArray(tags) ? tags : [],
+      owner_id: formatAsUUID(req.user.id),
       audit_trail: [{
         action: 'create',
-        user_id: req.user.id,
+        user_id: formatAsUUID(req.user.id),
         timestamp: new Date().toISOString()
       }]
     });
@@ -63,7 +76,7 @@ export const createDisaster = async (req, res) => {
     res.status(201).json(disaster);
   } catch (error) {
     console.error('Error creating disaster:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 };
 
@@ -150,15 +163,13 @@ export const updateDisaster = async (req, res) => {
     if (location_name) updateData.location_name = location_name;
     if (coordinates) updateData.location = coordinates;
     if (description) updateData.description = description;
-    if (tags) updateData.tags = tags;
-    
-    // Update the audit trail
+    if (tags) updateData.tags = tags;    // Update the audit trail
     const currentAuditTrail = disaster.audit_trail || [];
     updateData.audit_trail = [
       ...currentAuditTrail,
       {
         action: 'update',
-        user_id: req.user.id,
+        user_id: formatAsUUID(req.user.id),
         timestamp: new Date().toISOString()
       }
     ];
@@ -306,22 +317,32 @@ export const geocodeRequest = async (req, res) => {
       return res.status(400).json({ error: 'Text is required' });
     }
     
-    // Extract location from text
-    const { location } = await extractLocationFromText(text);
+    console.log('Attempting to extract location from text:', text.substring(0, 50) + '...');
     
-    if (location === 'Unknown location') {
-      return res.status(400).json({ error: 'Could not extract location from text' });
+    try {
+      // Extract location from text
+      const result = await extractLocationFromText(text);
+      const { location } = result;
+      
+      if (location === 'Unknown location') {
+        return res.status(400).json({ error: 'Could not extract location from text' });
+      }
+      
+      console.log('Successfully extracted location:', location);
+      
+      // Geocode the location
+      const coordinates = await geocodeLocation(location);
+      
+      res.json({
+        location_name: location,
+        coordinates
+      });
+    } catch (extractError) {
+      console.error('Location extraction error:', extractError);
+      return res.status(400).json({ error: 'Failed to extract location from text. Please provide a location name directly.' });
     }
-    
-    // Geocode the location
-    const coordinates = await geocodeLocation(location);
-    
-    res.json({
-      location_name: location,
-      coordinates
-    });
   } catch (error) {
-    console.error('Error geocoding:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error in geocode request:', error);
+    res.status(500).json({ error: 'Server error occurred while processing your request.' });
   }
 };

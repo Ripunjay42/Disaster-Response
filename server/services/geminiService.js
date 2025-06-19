@@ -62,37 +62,53 @@ export const extractLocationFromText = async (text) => {
   }
   
   try {
-    const response = await axios.post(
-      `${GEMINI_API_URL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        contents: [
-          {
-            parts: [
-              {
-                text: `Extract the location names from the following text. Only return the location name, nothing else. If multiple locations are mentioned, return the most specific one. If no location is mentioned, return "Unknown location".
+    // Using Google's recommended format for Gemini API
+    const payload = {
+      model: "gemini-1.5-flash",
+      contents: [
+        {
+          parts: [
+            {
+              text: `Extract the location names from the following text. Only return the location name, nothing else. If multiple locations are mentioned, return the most specific one. If no location is mentioned, return "Unknown location".
                   
 Text: ${text}`
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 100
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 100
+      }
+    };
+    
+    console.log('Making Gemini API request for location extraction');
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json'
         }
       }
     );
     
+    console.log('Received Gemini API response');
+    
     // Extract the response text
-    const responseText = response.data.candidates[0]?.content?.parts[0]?.text?.trim() || 'Unknown location';
+    const responseText = response.data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'Unknown location';
     
     // Save result to cache
-    await saveToCache(cacheKey, { location: responseText });
+    const result = { location: responseText };
+    await saveToCache(cacheKey, result);
     
-    return { location: responseText };
+    return result;
   } catch (error) {
-    console.error('Location extraction error:', error.message);
-    throw new Error(`Location extraction failed: ${error.message}`);
+    console.error('Location extraction error:', error);
+    console.error('Error details:', error.response?.data || 'No response data');
+    
+    // Default to a generic location if API fails
+    return { location: "Unknown location" };
   }
 };
 
@@ -117,25 +133,35 @@ export const verifyImage = async (imageUrl, description) => {
     const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
     const base64Image = Buffer.from(imageResponse.data, 'binary').toString('base64');
     
-    const response = await axios.post(
-      `${GEMINI_VISION_API_URL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        contents: [
-          {
-            parts: [
-              { text: `Analyze this disaster image. Is it authentic or manipulated? Does it match the following description: "${description}"? Provide a brief analysis and a verification score from 0-100 (0 being definitely fake, 100 being definitely authentic).` },
-              {
-                inline_data: {
-                  mime_type: imageResponse.headers['content-type'] || 'image/jpeg',
-                  data: base64Image
-                }
+    // Using Google's recommended format for Gemini Vision API
+    const payload = {
+      model: "gemini-1.5-flash",
+      contents: [
+        {
+          parts: [
+            { text: `Analyze this disaster image. Is it authentic or manipulated? Does it match the following description: "${description}"? Provide a brief analysis and a verification score from 0-100 (0 being definitely fake, 100 being definitely authentic).` },
+            {
+              inline_data: {
+                mime_type: imageResponse.headers['content-type'] || 'image/jpeg',
+                data: base64Image
               }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 800
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 800
+      }
+    };
+    
+    console.log('Making Gemini Vision API request');
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json'
         }
       }
     );

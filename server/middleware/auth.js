@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { formatAsUUID } from '../utils/uuidHelper.js';
 
 // Authenticate JWT token
 export const authenticate = (req, res, next) => {
@@ -10,6 +11,12 @@ export const authenticate = (req, res, next) => {
     }
     
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Format the user ID as UUID if necessary
+    if (decoded.id) {
+      decoded.id = formatAsUUID(decoded.id);
+    }
+    
     req.user = decoded;
     next();
   } catch (error) {
@@ -29,7 +36,7 @@ export const isAdmin = (req, res, next) => {
 // Check if user is admin or the resource owner
 export const isAdminOrOwner = (ownerId) => {
   return (req, res, next) => {
-    if (req.user && (req.user.role === 'admin' || req.user.id === ownerId)) {
+    if (req.user && (req.user.role === 'admin' || req.user.id === formatAsUUID(ownerId))) {
       next();
     } else {
       res.status(403).json({ message: 'Access denied: Insufficient permissions' });

@@ -83,8 +83,8 @@ export const logger = {
     });
   },
   
-  apiRequest: (endpoint, method, status) => {
-    logger.debug('API request', { endpoint, method, status, action: 'api_request' });
+  apiRequest: (endpoint, method, status, additionalData = {}) => {
+    logger.debug('API request', { endpoint, method, status, ...additionalData, action: 'api_request' });
   },
   
   externalApiCall: (service, endpoint, status) => {
