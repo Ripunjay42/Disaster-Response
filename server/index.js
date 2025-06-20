@@ -139,8 +139,8 @@ sequelize.authenticate().then(async () => {
   logger.info('✅ Database connected');
   await sequelize.sync({ alter: true });
   server.listen(PORT, () => {
-    logger.info(`🚀 Server running on http://localhost:${PORT}`);
+    logger.info(`Server running on http://localhost:${PORT}`);
   });
 }).catch(err => {
-  logger.error('❌ Database connection failed', { error: err.message });
+  logger.error('Database connection failed', { error: err.message });
 });

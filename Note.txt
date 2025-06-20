@@ -1,0 +1,29 @@
+# How I Used Claude 3.7 and GitHub Copilot for this Project
+
+1.  Writing Supabase Queries: Leveraged Claude 3.7 to generate optimized Supabase queries for retrieving nearby resources using PostGIS functions, which were then implemented 
+                                in the resourceController.js.
+
+2.  Implementing Mock Social Media Logic: Used Claude to design the socialMediaService.js with realistic mock data generation based on disaster tags and locations, making the 
+                                            simulation more believable.
+
+3.  Supabase Caching Implementation: GitHub Copilot helped create efficient caching mechanisms in cache.js model and across various services to reduce API calls and improve 
+                                        performance.
+
+4.  Authentication Middleware: Claude analyzed security requirements and helped develop the JWT-based auth.js middleware, while Copilot assisted with role-based access control 
+                                implementation.
+
+5.  React Context Setup: Used Copilot for scaffolding the AuthContext.jsx provider pattern, while Claude suggested improvements for token handling and secure state management.
+
+6.  Geospatial Model Design: Claude provided guidance on optimizing the disaster and resource models with proper PostGIS data types and indexes for spatial queries.
+
+7.  Socket.IO Real-time Updates: Leveraged both tools to implement the real-time notification system in the server's index.js and integrate it with resource creation events.
+
+8.  External API Integration: Used Copilot to generate the integration code for Mapbox geocoding in geocodingService.js, while Claude helped structure the error handling and response
+                                parsing.
+
+9.  Image Verification Service: Claude designed the AI-powered image verification system in geminiService.js, while Copilot helped implement the API calls and response processing for 
+                                disaster image validation.
+
+10. Rate Limiting Implementation: Used Claude to design the in-memory rate limiting solution in the server's index.js to protect against API abuse, while Copilot suggested optimizations.
+
+11. Protected Route Components: Leveraged Copilot to generate the ProtectedRoute.jsx component with proper role-based access checks that integrate seamlessly with the authentication system.
