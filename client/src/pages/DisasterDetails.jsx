@@ -1,21 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   getDisasterById, 
-  getReportsForDisaster, 
-  getResourcesForDisaster, 
+  getReportsForDisaster,
+  getResourcesForDisaster,
   getSocialMediaPosts,
   getOfficialUpdates,
-  createResource,
   createReport,
-  verifyImage
+  createResource,
+  verifyImage,
+  updateDisaster,
+  deleteDisaster
 } from '../services/api';
 import ResourceMap from '../components/ResourceMap';
+import DisasterEditForm from '../components/DisasterEditForm';
 
 const DisasterDetails = () => {
   const { id } = useParams();
-  const { isAuthenticated, user } = useAuth();
+  const navigate = useNavigate();
+  const { isAuthenticated, user, isAdmin } = useAuth();
   
   const [disaster, setDisaster] = useState(null);
   const [reports, setReports] = useState([]);
@@ -26,6 +30,11 @@ const DisasterDetails = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   
+  // Admin functionality states
+  const [isEditing, setIsEditing] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  
   // Form states with optimized change handling
   const [reportForm, setReportForm] = useState({ content: '', image_url: '' });
   const [resourceForm, setResourceForm] = useState({ name: '', location_name: '', type: '' });
@@ -34,76 +43,102 @@ const DisasterDetails = () => {
   
   // Load disaster data and related information
   useEffect(() => {
-    const fetchDisasterDetails = async () => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      
       try {
-        setLoading(true);
+        // Get disaster details
+        const disasterRes = await getDisasterById(id);
+        setDisaster(disasterRes.data);
         
-        // Fetch disaster details
-        const disasterResponse = await getDisasterById(id);
-        setDisaster(disasterResponse.data);
+        // Get reports
+        const reportsRes = await getReportsForDisaster(id);
+        setReports(reportsRes.data);
         
-        // Fetch related data in parallel
-        const [reportsResponse, resourcesResponse, socialResponse, updatesResponse] = await Promise.all([
-          getReportsForDisaster(id),
-          getResourcesForDisaster(id),
-          getSocialMediaPosts(id),
-          getOfficialUpdates(id)
-        ]);
+        // Get resources
+        const resourcesRes = await getResourcesForDisaster(id);
+        setResources(resourcesRes.data);
         
-        setReports(reportsResponse.data);
-        setResources(resourcesResponse.data);
-        setSocialMedia(socialResponse.data);
-        setOfficialUpdates(updatesResponse.data);
+        // Get social media posts and official updates if on those tabs
+        if (activeTab === 'socialMedia') {
+          const socialRes = await getSocialMediaPosts(id);
+          setSocialMedia(socialRes.data);
+        }
         
+        if (activeTab === 'officialUpdates') {
+          const updatesRes = await getOfficialUpdates(id);
+          setOfficialUpdates(updatesRes.data);
+        }
       } catch (err) {
-        console.error('Error fetching disaster details:', err);
-        setError('Failed to load disaster information. Please try again.');
+        console.error('Error fetching disaster data:', err);
+        setError('Failed to load disaster information');
       } finally {
         setLoading(false);
       }
     };
     
-    fetchDisasterDetails();
-  }, [id]);
+    fetchData();
+  }, [id, activeTab]);
+  
+  // Handle tab changes with data fetching if needed
+  const handleTabChange = async (tab) => {
+    setActiveTab(tab);
+    
+    // Fetch data for tabs that haven't been loaded yet
+    if (tab === 'socialMedia' && socialMedia.length === 0) {
+      try {
+        const socialRes = await getSocialMediaPosts(id);
+        setSocialMedia(socialRes.data);
+      } catch (err) {
+        console.error('Error fetching social media posts:', err);
+      }
+    }
+    
+    if (tab === 'officialUpdates' && officialUpdates.length === 0) {
+      try {
+        const updatesRes = await getOfficialUpdates(id);
+        setOfficialUpdates(updatesRes.data);
+      } catch (err) {
+        console.error('Error fetching official updates:', err);
+      }
+    }
+  };
   
   // Handle report form submission
   const handleReportSubmit = async (e) => {
     e.preventDefault();
     
     if (!reportForm.content) {
-      setError('Report content is required');
       return;
     }
     
     try {
       setSubmitLoading(true);
-      setError(null);
       
       const response = await createReport({
         disaster_id: id,
         content: reportForm.content,
-        image_url: reportForm.image_url || null
+        image_url: reportForm.image_url
       });
       
       // Add the new report to the list
-      setReports(prevReports => [response.data, ...prevReports]);
+      setReports([response.data, ...reports]);
       
-      // Clear the form
+      // Reset form
       setReportForm({ content: '', image_url: '' });
       
-      // If there's an image, verify it
+      // If image was provided, check verification
       if (reportForm.image_url) {
         try {
-          const verifyResponse = await verifyImage(id, reportForm.image_url, response.data.id);
-          setVerificationResult(verifyResponse.data);
-        } catch (verifyErr) {
-          console.error('Error verifying image:', verifyErr);
+          const verifyRes = await verifyImage(id, reportForm.image_url);
+          setVerificationResult(verifyRes.data);
+        } catch (err) {
+          console.error('Image verification failed:', err);
         }
       }
-      
     } catch (err) {
-      console.error('Failed to submit report:', err);
-      setError(err.response?.data?.error || 'Failed to submit report');
+      console.error('Error creating report:', err);
     } finally {
       setSubmitLoading(false);
     }
@@ -114,13 +149,11 @@ const DisasterDetails = () => {
     e.preventDefault();
     
     if (!resourceForm.name || !resourceForm.location_name || !resourceForm.type) {
-      setError('All resource fields are required');
       return;
     }
     
     try {
       setSubmitLoading(true);
-      setError(null);
       
       const response = await createResource({
         disaster_id: id,
@@ -130,14 +163,12 @@ const DisasterDetails = () => {
       });
       
       // Add the new resource to the list
-      setResources(prevResources => [...prevResources, response.data]);
+      setResources([...resources, response.data]);
       
-      // Clear the form
+      // Reset form
       setResourceForm({ name: '', location_name: '', type: '' });
-      
     } catch (err) {
-      console.error('Failed to add resource:', err);
-      setError(err.response?.data?.error || 'Failed to add resource');
+      console.error('Error creating resource:', err);
     } finally {
       setSubmitLoading(false);
     }
@@ -146,340 +177,249 @@ const DisasterDetails = () => {
   // Handle report form changes efficiently
   const handleReportFormChange = (e) => {
     const { name, value } = e.target;
-    setReportForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setReportForm(prev => ({ ...prev, [name]: value }));
   };
   
   // Handle resource form changes efficiently
   const handleResourceFormChange = (e) => {
     const { name, value } = e.target;
-    setResourceForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setResourceForm(prev => ({ ...prev, [name]: value }));
+  };
+  
+  // Admin functions
+  const handleEditSubmit = async (updatedData) => {
+    try {
+      setActionLoading(true);
+      await updateDisaster(id, updatedData);
+      
+      // Update the disaster in state
+      setDisaster({ ...disaster, ...updatedData });
+      setIsEditing(false);
+    } catch (err) {
+      console.error('Error updating disaster:', err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+  
+  const handleDeleteDisaster = async () => {
+    try {
+      setActionLoading(true);
+      await deleteDisaster(id);
+      
+      // Redirect to home page after successful deletion
+      navigate('/');
+    } catch (err) {
+      console.error('Error deleting disaster:', err);
+      setError('Failed to delete disaster');
+      setDeleteModalOpen(false);
+      setActionLoading(false);
+    }
   };
   
   if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-        </div>
-      </div>
-    );
+    return <div className="flex justify-center py-10">Loading disaster information...</div>;
   }
   
   if (error) {
-    return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          <p>{error}</p>
-        </div>
-      </div>
-    );
+    return <div className="text-red-500 text-center py-10">{error}</div>;
   }
   
   if (!disaster) {
+    return <div className="text-center py-10">Disaster not found</div>;
+  }
+  
+  // Display edit form if editing
+  if (isEditing) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded">
-          <p>Disaster not found</p>
-        </div>
+      <div>
+        <DisasterEditForm 
+          disaster={disaster}
+          onSubmit={handleEditSubmit}
+          onCancel={() => setIsEditing(false)}
+        />
       </div>
     );
   }
   
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      {/* Disaster Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">{disaster.title}</h1>
-        <div className="flex items-center text-gray-600 mb-4">
-          <span className="mr-4">Location: {disaster.location_name}</span>
-          <span>Created: {new Date(disaster.created_at).toLocaleDateString()}</span>
-        </div>
-        <p className="text-lg">{disaster.description}</p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {disaster.tags && disaster.tags.map((tag) => (
-            <span 
-              key={tag} 
-              className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded"
+    <div>
+      <div className="mb-6">
+        {/* Admin controls */}
+        {isAdmin && (
+          <div className="mb-4 flex justify-end space-x-2">
+            <button 
+              onClick={() => setIsEditing(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
             >
-              {tag}
-            </span>
-          ))}
+              Edit Disaster
+            </button>
+            <button 
+              onClick={() => setDeleteModalOpen(true)}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+            >
+              Delete Disaster
+            </button>
+          </div>
+        )}
+        
+        <h1 className="text-3xl font-bold">{disaster.title}</h1>
+        <div className="text-gray-600 mb-4">
+          <span className="font-medium">Location: </span>{disaster.location_name}
+        </div>
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-2">Description</h2>
+          <p className="whitespace-pre-line">{disaster.description}</p>
+          
+          {disaster.tags && disaster.tags.length > 0 && (
+            <div className="mt-4">
+              <h3 className="font-semibold mb-1">Tags:</h3>
+              <div className="flex flex-wrap gap-1">
+                {disaster.tags.map((tag) => (
+                  <span 
+                    key={tag} 
+                    className="bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       
-      {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="flex space-x-8">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+      {/* Tab navigation */}
+      <div className="border-b mb-6">
+        <nav className="flex flex-wrap">
+          <button 
+            onClick={() => handleTabChange('overview')}
+            className={`mr-4 py-2 px-1 ${
               activeTab === 'overview' 
-                ? 'border-blue-500 text-blue-600' 
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-b-2 border-blue-600 font-medium text-blue-600' 
+                : 'text-gray-600 hover:text-blue-500'
             }`}
           >
             Overview
           </button>
-          <button
-            onClick={() => setActiveTab('resources')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'resources' 
-                ? 'border-blue-500 text-blue-600' 
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Resources
-          </button>
-          <button
-            onClick={() => setActiveTab('reports')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+          <button 
+            onClick={() => handleTabChange('reports')}
+            className={`mr-4 py-2 px-1 ${
               activeTab === 'reports' 
-                ? 'border-blue-500 text-blue-600' 
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-b-2 border-blue-600 font-medium text-blue-600' 
+                : 'text-gray-600 hover:text-blue-500'
             }`}
           >
             Reports
           </button>
-          <button
-            onClick={() => setActiveTab('updates')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'updates' 
-                ? 'border-blue-500 text-blue-600' 
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          <button 
+            onClick={() => handleTabChange('resources')}
+            className={`mr-4 py-2 px-1 ${
+              activeTab === 'resources' 
+                ? 'border-b-2 border-blue-600 font-medium text-blue-600' 
+                : 'text-gray-600 hover:text-blue-500'
             }`}
           >
-            Updates
+            Resources
+          </button>
+          <button 
+            onClick={() => handleTabChange('socialMedia')}
+            className={`mr-4 py-2 px-1 ${
+              activeTab === 'socialMedia' 
+                ? 'border-b-2 border-blue-600 font-medium text-blue-600' 
+                : 'text-gray-600 hover:text-blue-500'
+            }`}
+          >
+            Social Media
+          </button>
+          <button 
+            onClick={() => handleTabChange('officialUpdates')}
+            className={`mr-4 py-2 px-1 ${
+              activeTab === 'officialUpdates' 
+                ? 'border-b-2 border-blue-600 font-medium text-blue-600' 
+                : 'text-gray-600 hover:text-blue-500'
+            }`}
+          >
+            Official Updates
           </button>
         </nav>
       </div>
       
-      {/* Tab Content */}
-      <div className="mb-8">
-        {/* Overview Tab */}
+      {/* Tab content */}
+      <div>
+        {/* Overview tab */}
         {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div>
-              <h2 className="text-xl font-semibold mb-4">Social Media Updates</h2>
-              {socialMedia.length === 0 ? (
-                <p className="text-gray-500">No social media updates available</p>
-              ) : (
-                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                  {socialMedia.map((post) => (
-                    <div 
-                      key={post.id} 
-                      className={`p-4 rounded-lg border ${
-                        post.priority === 'high' 
-                          ? 'bg-red-50 border-red-200' 
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                    >
-                      <div className="flex justify-between">
-                        <span className="font-medium">@{post.username}</span>
-                        <span className="text-sm text-gray-500">
-                          {new Date(post.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <p className="mt-2">{post.content}</p>
-                      {post.priority === 'high' && (
-                        <div className="mt-2 text-sm text-red-600">High Priority</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            
-            <div>
-              <h2 className="text-xl font-semibold mb-4">Official Updates</h2>
-              {officialUpdates.length === 0 ? (
-                <p className="text-gray-500">No official updates available</p>
-              ) : (
-                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                  {officialUpdates.map((update, index) => (
-                    <div 
-                      key={index} 
-                      className="p-4 bg-blue-50 border border-blue-200 rounded-lg"
-                    >
-                      <div className="flex justify-between">
-                        <span className="font-medium">{update.source}</span>
-                        <span className="text-sm text-gray-500">{update.date}</span>
-                      </div>
-                      <h3 className="font-medium mt-1">{update.title}</h3>
-                      <p className="mt-2 text-sm">{update.content}</p>
-                      {update.source_url && (
-                        <a 
-                          href={update.source_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="mt-2 text-blue-600 hover:underline text-sm inline-block"
-                        >
-                          Source
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        
-        {/* Resources Tab */}
-        {activeTab === 'resources' && (
           <div>
-            <div className="mb-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Available Resources</h2>
-                <span className="bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded">
-                  {resources.length} Total
-                </span>
-              </div>
-              
-              {/* Resource Map */}
-              <div className="mb-6">
-                <ResourceMap 
-                  resources={resources} 
-                  disaster={disaster} 
-                  height="500px" 
-                />
-              </div>
-              
-              {/* Resource List */}
-              {resources.length === 0 ? (
-                <p className="text-gray-500">No resources available</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                  {resources.map((resource) => (
-                    <div 
-                      key={resource.id} 
-                      className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm"
-                    >
-                      <h3 className="font-medium text-lg">{resource.name}</h3>
-                      <p className="text-gray-600 mt-1">{resource.location_name}</p>
-                      <div className="mt-2 flex items-center">
-                        <span className={`px-2 py-0.5 rounded text-xs ${
-                          resource.type === 'shelter' ? 'bg-green-100 text-green-800' :
-                          resource.type === 'medical' ? 'bg-red-100 text-red-800' :
-                          resource.type === 'food' ? 'bg-amber-100 text-amber-800' :
-                          resource.type === 'water' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {resource.type}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Reports Overview</h2>
+                <div className="bg-white rounded-lg shadow p-4">
+                  <p className="mb-2">
+                    <span className="font-medium">Total reports:</span> {reports.length}
+                  </p>
+                  {/* More report stats could go here */}
                 </div>
-              )}
-            </div>
-            
-            {/* Add Resource Form */}
-            {isAuthenticated && (
-              <div className="mt-8 bg-gray-50 p-6 rounded-lg border border-gray-200">
-                <h3 className="text-lg font-medium mb-4">Add a Resource</h3>
-                {error && (
-                  <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                    <p>{error}</p>
-                  </div>
-                )}
-                <form onSubmit={handleResourceSubmit}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="block text-gray-700 text-sm font-bold mb-2">
-                        Name *
-                      </label>
-                      <input
-                        type="text"
-                        name="name"
-                        value={resourceForm.name}
-                        onChange={handleResourceFormChange}
-                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
-                      />
+                
+                <h2 className="text-xl font-semibold mt-6 mb-4">Resources Overview</h2>
+                <div className="bg-white rounded-lg shadow p-4">
+                  <p className="mb-2">
+                    <span className="font-medium">Total resources:</span> {resources.length}
+                  </p>
+                  {/* Resource type breakdown */}
+                  {resources.length > 0 && (
+                    <div className="mt-4">
+                      <h3 className="font-medium mb-2">Resource types:</h3>
+                      <ul className="list-disc list-inside">
+                        {Object.entries(
+                          resources.reduce((acc, resource) => {
+                            acc[resource.type] = (acc[resource.type] || 0) + 1;
+                            return acc;
+                          }, {})
+                        ).map(([type, count]) => (
+                          <li key={type}>
+                            {type}: {count}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <div>
-                      <label className="block text-gray-700 text-sm font-bold mb-2">
-                        Location *
-                      </label>
-                      <input
-                        type="text"
-                        name="location_name"
-                        value={resourceForm.location_name}
-                        onChange={handleResourceFormChange}
-                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-bold mb-2">
-                      Type *
-                    </label>
-                    <select
-                      name="type"
-                      value={resourceForm.type}
-                      onChange={handleResourceFormChange}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    >
-                      <option value="">Select type</option>
-                      <option value="shelter">Shelter</option>
-                      <option value="medical">Medical</option>
-                      <option value="food">Food</option>
-                      <option value="water">Water</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  
-                  <div className="flex justify-end">
-                    <button
-                      type="submit"
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                      disabled={submitLoading}
-                    >
-                      {submitLoading ? 'Adding...' : 'Add Resource'}
-                    </button>
-                  </div>
-                </form>
+                  )}
+                </div>
               </div>
-            )}
+              
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Location Map</h2>
+                <div className="bg-white rounded-lg shadow p-4">
+                  <ResourceMap 
+                    disaster={disaster} 
+                    resources={resources}
+                    height="400px"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         )}
         
-        {/* Reports Tab */}
+        {/* Reports tab */}
         {activeTab === 'reports' && (
           <div>
-            <h2 className="text-xl font-semibold mb-4">Community Reports</h2>
-            
-            {/* Add Report Form */}
             {isAuthenticated && (
-              <div className="mb-8 bg-gray-50 p-6 rounded-lg border border-gray-200">
-                <h3 className="text-lg font-medium mb-4">Add a Report</h3>
-                {error && (
-                  <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                    <p>{error}</p>
-                  </div>
-                )}
+              <div className="bg-white rounded-lg shadow p-4 mb-6">
+                <h2 className="text-xl font-semibold mb-4">Submit a Report</h2>
                 <form onSubmit={handleReportSubmit}>
                   <div className="mb-4">
                     <label className="block text-gray-700 text-sm font-bold mb-2">
-                      Content *
+                      Report Content *
                     </label>
                     <textarea
                       name="content"
                       value={reportForm.content}
                       onChange={handleReportFormChange}
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-600"
                       rows={3}
                       required
-                    ></textarea>
+                      placeholder="Describe the situation..."
+                    />
                   </div>
                   
                   <div className="mb-4">
@@ -491,88 +431,226 @@ const DisasterDetails = () => {
                       name="image_url"
                       value={reportForm.image_url}
                       onChange={handleReportFormChange}
+                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-600"
                       placeholder="https://example.com/image.jpg"
-                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
-                    <p className="text-gray-500 text-xs mt-1">
-                      Images will be verified for authenticity
+                    <p className="text-sm text-gray-600 mt-1">
+                      Note: Images will be automatically verified for authenticity
                     </p>
                   </div>
                   
-                  <div className="flex justify-end">
-                    <button
-                      type="submit"
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                      disabled={submitLoading}
-                    >
-                      {submitLoading ? 'Submitting...' : 'Submit Report'}
-                    </button>
-                  </div>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    disabled={submitLoading}
+                  >
+                    {submitLoading ? 'Submitting...' : 'Submit Report'}
+                  </button>
                 </form>
                 
-                {/* Verification Result */}
-                {/* {verificationResult && (
-                  <div className={`mt-4 p-4 rounded-lg ${
-                    verificationResult.verification === 'verified' ? 'bg-green-50 border border-green-200' : 
-                    verificationResult.verification === 'fake' ? 'bg-red-50 border border-red-200' :
-                    'bg-yellow-50 border border-yellow-200'
+                {verificationResult && (
+                  <div className={`mt-4 p-4 rounded ${
+                    verificationResult.verification === 'verified' 
+                      ? 'bg-green-100 text-green-800' 
+                      : verificationResult.verification === 'fake'
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-yellow-100 text-yellow-800'
                   }`}>
-                    <h4 className="font-medium mb-2">Image Verification Result</h4>
-                    <div className="flex items-center gap-2">
-                      <span>Verification status:</span>
-                      <span className={`px-2 py-0.5 rounded text-xs ${
-                        verificationResult.verification === 'verified' ? 'bg-green-100 text-green-800' : 
-                        verificationResult.verification === 'fake' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {verificationResult.verification === 'verified' ? 'Verified' : 
-                         verificationResult.verification === 'fake' ? 'Potentially Misleading' : 
-                         'Uncertain'}
-                      </span>
-                    </div>
-                    <p className="text-sm mt-2">{verificationResult.analysis}</p>
+                    <h3 className="font-bold mb-2">Image Verification Result</h3>
+                    <p>Status: {verificationResult.verification}</p>
+                    <p>Score: {verificationResult.score}/100</p>
+                    {/* <p className="mt-2">{verificationResult.analysis}</p> */}
                   </div>
-                )} */}
+                )}
               </div>
             )}
             
-            {/* Reports List */}
+            <h2 className="text-xl font-semibold mb-4">Reports</h2>
             {reports.length === 0 ? (
-              <p className="text-gray-500">No reports available</p>
+              <p>No reports yet. Be the first to submit a report.</p>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {reports.map((report) => (
-                  <div 
-                    key={report.id} 
-                    className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm"
-                  >
-                    <div className="flex justify-between items-start">
-                      <p className="text-gray-800 whitespace-pre-line">{report.content}</p>
-                      {report.verification_status && report.verification_status !== 'not_applicable' && (
-                        <span className={`ml-4 px-2 py-0.5 rounded text-xs ${
-                          report.verification_status === 'verified' ? 'bg-green-100 text-green-800' : 
-                          report.verification_status === 'fake' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
+                  <div key={report.id} className="bg-white rounded-lg shadow p-4">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 text-sm">
+                        {new Date(report.created_at).toLocaleString()}
+                      </span>
+                      {report.verification_status && (
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          report.verification_status === 'verified' 
+                            ? 'bg-green-100 text-green-800' 
+                            : report.verification_status === 'fake'
+                            ? 'bg-red-100 text-red-800'
+                            : report.verification_status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-800'
                         }`}>
-                          {report.verification_status === 'verified' ? 'Verified' : 
-                           report.verification_status === 'fake' ? 'Potentially Misleading' : 
-                           report.verification_status}
+                          {report.verification_status}
                         </span>
                       )}
                     </div>
-                    
+                    <p className="mt-2">{report.content}</p>
                     {report.image_url && (
-                      <div className="mt-4">
+                      <div className="mt-3">
                         <img 
                           src={report.image_url} 
-                          alt="Report"
-                          className="rounded-lg max-h-80 object-contain bg-gray-50"
+                          alt="Report" 
+                          className="max-h-60 rounded"
                         />
                       </div>
                     )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Resources tab */}
+        {activeTab === 'resources' && (
+          <div>
+            {isAuthenticated && (
+              <div className="bg-white rounded-lg shadow p-4 mb-6">
+                <h2 className="text-xl font-semibold mb-4">Add a Resource</h2>
+                <form onSubmit={handleResourceSubmit}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-gray-700 text-sm font-bold mb-2">
+                        Resource Name *
+                      </label>
+                      <input
+                        type="text"
+                        name="name"
+                        value={resourceForm.name}
+                        onChange={handleResourceFormChange}
+                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        required
+                        placeholder="e.g., City Memorial Hospital"
+                      />
+                    </div>
                     
-                    <div className="mt-4 text-sm text-gray-500">
-                      Reported at {new Date(report.created_at).toLocaleString()}
+                    <div>
+                      <label className="block text-gray-700 text-sm font-bold mb-2">
+                        Resource Type *
+                      </label>
+                      <select
+                        name="type"
+                        value={resourceForm.type}
+                        onChange={handleResourceFormChange}
+                        className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        required
+                      >
+                        <option value="">Select a type</option>
+                        <option value="shelter">Shelter</option>
+                        <option value="medical">Medical</option>
+                        <option value="food">Food</option>
+                        <option value="water">Water</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 mb-6">
+                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                      Location *
+                    </label>
+                    <input
+                      type="text"
+                      name="location_name"
+                      value={resourceForm.location_name}
+                      onChange={handleResourceFormChange}
+                      className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-600"
+                      required
+                      placeholder="e.g., 123 Main St, City, State"
+                    />
+                  </div>
+                  
+                  <button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    disabled={submitLoading}
+                  >
+                    {submitLoading ? 'Adding...' : 'Add Resource'}
+                  </button>
+                </form>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Available Resources</h2>
+                {resources.length === 0 ? (
+                  <p>No resources have been added yet.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {resources.map((resource) => (
+                      <div key={resource.id} className="bg-white rounded-lg shadow p-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-bold text-lg">{resource.name}</h3>
+                            <p className="text-gray-600">{resource.location_name}</p>
+                          </div>
+                          <span className={`px-3 py-1 rounded text-sm ${
+                            resource.type === 'shelter' ? 'bg-green-100 text-green-800' :
+                            resource.type === 'medical' ? 'bg-red-100 text-red-800' :
+                            resource.type === 'food' ? 'bg-amber-100 text-amber-800' :
+                            resource.type === 'water' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {resource.type}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Resources Map</h2>
+                <div className="bg-white rounded-lg shadow p-4">
+                  <ResourceMap 
+                    disaster={disaster} 
+                    resources={resources}
+                    height="500px"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Social Media tab */}
+        {activeTab === 'socialMedia' && (
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Social Media Updates</h2>
+            {socialMedia.length === 0 ? (
+              <p>Loading social media posts...</p>
+            ) : (
+              <div className="space-y-4">
+                {socialMedia.map((post) => (
+                  <div 
+                    key={post.id} 
+                    className={`bg-white rounded-lg shadow p-4 ${
+                      post.priority === 'high' ? 'border-l-4 border-red-500' : ''
+                    }`}
+                  >
+                    <div className="flex justify-between">
+                      <span className="font-bold">@{post.username}</span>
+                      <span className="text-gray-600 text-sm">
+                        {new Date(post.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="mt-2">{post.content}</p>
+                    <div className="mt-2">
+                      <span className={`inline-block px-2 py-1 rounded-full text-xs ${
+                        post.type === 'need' ? 'bg-red-100 text-red-800' :
+                        post.type === 'offer' ? 'bg-green-100 text-green-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {post.type}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -581,51 +659,31 @@ const DisasterDetails = () => {
           </div>
         )}
         
-        {/* Updates Tab */}
-        {activeTab === 'updates' && (
+        {/* Official Updates tab */}
+        {activeTab === 'officialUpdates' && (
           <div>
-            <h2 className="text-xl font-semibold mb-6">Official Updates</h2>
-            
+            <h2 className="text-xl font-semibold mb-4">Official Updates</h2>
             {officialUpdates.length === 0 ? (
-              <p className="text-gray-500">No official updates available</p>
+              <p>Loading official updates...</p>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {officialUpdates.map((update, index) => (
-                  <div 
-                    key={index} 
-                    className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                      <h3 className="font-medium text-lg">{update.title}</h3>
-                      <div className="mt-2 sm:mt-0 flex items-center space-x-2">
-                        <span className={`px-2 py-0.5 rounded text-xs ${
-                          update.type === 'government' ? 'bg-purple-100 text-purple-800' : 
-                          'bg-orange-100 text-orange-800'
-                        }`}>
-                          {update.type}
-                        </span>
-                        <span className="text-gray-500 text-sm">{update.date}</span>
-                      </div>
+                  <div key={index} className="bg-white rounded-lg shadow p-4">
+                    <div className="flex justify-between">
+                      <span className="font-bold">{update.source}</span>
+                      <span className="text-gray-600 text-sm">{update.date}</span>
                     </div>
-                    
+                    <h3 className="font-medium mt-2">{update.title}</h3>
+                    <p className="mt-2">{update.content}</p>
                     <div className="mt-4">
-                      <p>{update.content}</p>
-                    </div>
-                    
-                    <div className="mt-4 flex items-center">
-                      <span className="text-gray-600 text-sm mr-2">Source:</span>
-                      {update.source_url ? (
-                        <a 
-                          href={update.source_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline text-sm"
-                        >
-                          {update.source}
-                        </a>
-                      ) : (
-                        <span className="text-sm">{update.source}</span>
-                      )}
+                      <a 
+                        href={update.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        Source Link
+                      </a>
                     </div>
                   </div>
                 ))}
@@ -634,6 +692,33 @@ const DisasterDetails = () => {
           </div>
         )}
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
+            <h2 className="text-xl font-bold mb-4">Confirm Deletion</h2>
+            <p>Are you sure you want to delete this disaster? This action cannot be undone.</p>
+            
+            <div className="flex justify-end space-x-2 mt-6">
+              <button
+                onClick={() => setDeleteModalOpen(false)}
+                className="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded"
+                disabled={actionLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteDisaster}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+                disabled={actionLoading}
+              >
+                {actionLoading ? 'Deleting...' : 'Delete Disaster'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

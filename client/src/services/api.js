@@ -38,6 +38,14 @@ export const createDisaster = (disasterData) => {
   return api.post('/disasters', disasterData);
 };
 
+export const updateDisaster = (id, disasterData) => {
+  return api.put(`/disasters/${id}`, disasterData);
+};
+
+export const deleteDisaster = (id) => {
+  return api.delete(`/disasters/${id}`);
+};
+
 export const getSocialMediaPosts = (disasterId) => {
   return api.get(`/disasters/${disasterId}/social-media`);
 };
