@@ -72,7 +72,7 @@ const Home = () => {  const [disasters, setDisasters] = useState([]);
             placeholder="Filter by tag (type to search)"
             value={tag}
             onChange={handleTagChange}
-            className="border rounded px-3 py-1"
+            className="border rounded px-3 py-1 w-24 md:w-80"
             aria-label="Filter disasters by tag"
           />
           <button 

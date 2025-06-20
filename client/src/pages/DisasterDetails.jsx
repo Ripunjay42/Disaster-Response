@@ -294,7 +294,7 @@ const DisasterDetails = () => {
         <nav className="flex flex-wrap">
           <button 
             onClick={() => handleTabChange('overview')}
-            className={`mr-4 py-2 px-1 ${
+            className={`mr-2.5 py-1 px-1 ${
               activeTab === 'overview' 
                 ? 'border-b-2 border-blue-600 font-medium text-blue-600' 
                 : 'text-gray-600 hover:text-blue-500'
@@ -304,7 +304,7 @@ const DisasterDetails = () => {
           </button>
           <button 
             onClick={() => handleTabChange('reports')}
-            className={`mr-4 py-2 px-1 ${
+            className={`mr-2.5 py-1 px-1 ${
               activeTab === 'reports' 
                 ? 'border-b-2 border-blue-600 font-medium text-blue-600' 
                 : 'text-gray-600 hover:text-blue-500'
@@ -314,7 +314,7 @@ const DisasterDetails = () => {
           </button>
           <button 
             onClick={() => handleTabChange('resources')}
-            className={`mr-4 py-2 px-1 ${
+            className={`mr-2.5 py-1 px-1 ${
               activeTab === 'resources' 
                 ? 'border-b-2 border-blue-600 font-medium text-blue-600' 
                 : 'text-gray-600 hover:text-blue-500'
@@ -324,7 +324,7 @@ const DisasterDetails = () => {
           </button>
           <button 
             onClick={() => handleTabChange('socialMedia')}
-            className={`mr-4 py-2 px-1 ${
+            className={`mr-2.5 py-1 px-1 ${
               activeTab === 'socialMedia' 
                 ? 'border-b-2 border-blue-600 font-medium text-blue-600' 
                 : 'text-gray-600 hover:text-blue-500'
@@ -334,7 +334,7 @@ const DisasterDetails = () => {
           </button>
           <button 
             onClick={() => handleTabChange('officialUpdates')}
-            className={`mr-4 py-2 px-1 ${
+            className={`mr-2.5 py-1 px-1 ${
               activeTab === 'officialUpdates' 
                 ? 'border-b-2 border-blue-600 font-medium text-blue-600' 
                 : 'text-gray-600 hover:text-blue-500'
