@@ -13,7 +13,7 @@ const ResourceMap = ({ resources, disaster, height = "500px" }) => {
     if (!mapContainer.current) return;
 
     // Get API key from .env file (Vite prepends with VITE_)
-    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_API_KEY || 'pk.eyJ1Ijoic3BpZGVybmlzaGFudGEiLCJhIjoiY20ydW5ubGZuMDNlZTJpc2I1N2o3YWo0aiJ9.tKmf9gr1qgyi_N7WOaPoZw';
+    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
 
     // Set default location if disaster location not available
     const defaultLocation = [78.9629, 20.5937]; // Center of India
