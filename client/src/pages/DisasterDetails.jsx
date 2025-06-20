@@ -24,7 +24,7 @@ const DisasterDetails = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   
-  // Form states
+  // Form states with optimized change handling
   const [reportForm, setReportForm] = useState({ content: '', image_url: '' });
   const [resourceForm, setResourceForm] = useState({ name: '', location_name: '', type: '' });
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -106,6 +106,24 @@ const DisasterDetails = () => {
     } finally {
       setSubmitLoading(false);
     }
+  };
+  
+  // Handle report form changes efficiently
+  const handleReportFormChange = (e) => {
+    const { name, value } = e.target;
+    setReportForm(prevForm => ({
+      ...prevForm,
+      [name]: value
+    }));
+  };
+  
+  // Handle resource form changes efficiently
+  const handleResourceFormChange = (e) => {
+    const { name, value } = e.target;
+    setResourceForm(prevForm => ({
+      ...prevForm,
+      [name]: value
+    }));
   };
   
   if (loading) {
@@ -253,8 +271,9 @@ const DisasterDetails = () => {
                       className="w-full border rounded p-2"
                       rows={4}
                       placeholder="Describe what you're seeing..."
+                      name="content"
                       value={reportForm.content}
-                      onChange={(e) => setReportForm({...reportForm, content: e.target.value})}
+                      onChange={handleReportFormChange}
                       required
                     />
                   </div>
@@ -263,8 +282,9 @@ const DisasterDetails = () => {
                       type="url"
                       className="w-full border rounded p-2"
                       placeholder="Image URL (optional)"
+                      name="image_url"
                       value={reportForm.image_url}
-                      onChange={(e) => setReportForm({...reportForm, image_url: e.target.value})}
+                      onChange={handleReportFormChange}
                     />
                   </div>
                   <button
@@ -335,8 +355,9 @@ const DisasterDetails = () => {
                         type="text"
                         className="w-full border rounded p-2"
                         placeholder="e.g., Community Shelter"
+                        name="name"
                         value={resourceForm.name}
-                        onChange={(e) => setResourceForm({...resourceForm, name: e.target.value})}
+                        onChange={handleResourceFormChange}
                         required
                       />
                     </div>
@@ -346,8 +367,9 @@ const DisasterDetails = () => {
                       </label>
                       <select
                         className="w-full border rounded p-2"
+                        name="type"
                         value={resourceForm.type}
-                        onChange={(e) => setResourceForm({...resourceForm, type: e.target.value})}
+                        onChange={handleResourceFormChange}
                         required
                       >
                         <option value="">Select Type</option>
@@ -368,8 +390,9 @@ const DisasterDetails = () => {
                       type="text"
                       className="w-full border rounded p-2"
                       placeholder="Address or location name"
+                      name="location_name"
                       value={resourceForm.location_name}
-                      onChange={(e) => setResourceForm({...resourceForm, location_name: e.target.value})}
+                      onChange={handleResourceFormChange}
                       required
                     />
                   </div>

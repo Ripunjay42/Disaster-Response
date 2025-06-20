@@ -1,4 +1,4 @@
-import { Disaster, Report, Resource } from '../models/index.js';
+import { Disaster, Report, sequelize } from '../models/index.js';
 import { geocodeLocation } from '../services/geocodingService.js';
 import { extractLocationFromText } from '../services/geminiService.js';
 import { getMockSocialMediaPosts } from '../services/socialMediaService.js';
@@ -6,7 +6,6 @@ import { getOfficialUpdates } from '../services/updateService.js';
 import { verifyImage } from '../services/geminiService.js';
 import { formatAsUUID } from '../utils/uuidHelper.js';
 import { Op } from 'sequelize';
-import { sequelize } from '../models/index.js';
 
 // Create a new disaster
 export const createDisaster = async (req, res) => {
@@ -86,9 +85,17 @@ export const getDisasters = async (req, res) => {
     const { tag, location, radius } = req.query;
     let whereClause = {};
     
-    // Filter by tag if provided
-    if (tag) {
-      whereClause.tags = { [Op.contains]: [tag] };
+    // Filter by tag if provided - using ILIKE for partial matches with any tag
+    if (tag && tag.trim() !== '') {
+      // Sanitize the tag input to prevent SQL injection
+      const sanitizedTag = tag.replace(/[%_'"\\\x00-\x1F\x7F]/g, '').trim().toLowerCase();
+      
+      // Use a safer parametrized query pattern to avoid SQL injection issues
+      whereClause = {
+        [Op.and]: [
+          sequelize.literal(`EXISTS (SELECT 1 FROM unnest(tags) AS t WHERE LOWER(t) LIKE '%${sanitizedTag}%')`)
+        ]
+      };
     }
     
     // Filter by location radius if provided

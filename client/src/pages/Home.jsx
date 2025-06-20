@@ -2,33 +2,57 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getDisasters } from '../services/api';
 
-const Home = () => {
-  const [disasters, setDisasters] = useState([]);
+const Home = () => {  const [disasters, setDisasters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tag, setTag] = useState('');
-  
-  useEffect(() => {
-    const fetchDisasters = async () => {
-      try {
-        setLoading(true);
-        const params = tag ? { tag } : {};
-        const response = await getDisasters(params);
-        setDisasters(response.data);
-      } catch (error) {
-        console.error('Error fetching disasters:', error);
-        setError('Failed to load disasters. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
+  const [debouncedTag, setDebouncedTag] = useState('');
+
+  // Fetch disasters with optional tag filter
+  const fetchDisasters = async (filterTag) => {
+    try {
+      setLoading(true);
+      const params = filterTag ? { tag: filterTag } : {};
+      const response = await getDisasters(params);
+      setDisasters(response.data);
+    } catch (error) {
+      console.error('Error fetching disasters:', error);
+      setError('Failed to load disasters. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial load of disasters
+  useEffect(() => {    
     fetchDisasters();
-  }, [tag]);
+  }, []);
+
+  // Handle tag input with debounce
+  const handleTagChange = (e) => {
+    const value = e.target.value;
+    setTag(value);
+    
+    // Clear any existing timeout
+    if (window.tagFilterTimeout) {
+      clearTimeout(window.tagFilterTimeout);
+    }
+    
+    // Set a new timeout to update the filter after typing stops
+    window.tagFilterTimeout = setTimeout(() => {
+      setDebouncedTag(value);
+    }, 500); // 500ms debounce
+  };
   
+  // Effect to filter disasters when debounced tag changes
+  useEffect(() => {
+    fetchDisasters(debouncedTag);
+  }, [debouncedTag]);
+  
+  // Still keep the form handler for direct form submission (e.g., Enter key)
   const handleTagFilter = (e) => {
     e.preventDefault();
-    // The tag state is already set via the input, so just trigger a re-render
+    setDebouncedTag(tag);
   };
   
   if (loading) {
@@ -40,16 +64,16 @@ const Home = () => {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
+    <div>      <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Active Disasters</h1>
         <form onSubmit={handleTagFilter} className="flex space-x-2">
           <input
             type="text"
-            placeholder="Filter by tag"
+            placeholder="Filter by tag (type to search)"
             value={tag}
-            onChange={(e) => setTag(e.target.value)}
+            onChange={handleTagChange}
             className="border rounded px-3 py-1"
+            aria-label="Filter disasters by tag"
           />
           <button 
             type="submit"

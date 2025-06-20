@@ -13,12 +13,14 @@ const CreateDisaster = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [extractingLocation, setExtractingLocation] = useState(false);
-
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value } = e.target;
+    
+    // Update the form data
+    setFormData(prevData => ({
+      ...prevData,
+      [name]: value
+    }));
   };
 
   const extractLocation = async () => {
