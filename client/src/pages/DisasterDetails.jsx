@@ -511,7 +511,7 @@ const DisasterDetails = () => {
                 </form>
                 
                 {/* Verification Result */}
-                {verificationResult && (
+                {/* {verificationResult && (
                   <div className={`mt-4 p-4 rounded-lg ${
                     verificationResult.verification === 'verified' ? 'bg-green-50 border border-green-200' : 
                     verificationResult.verification === 'fake' ? 'bg-red-50 border border-red-200' :
@@ -532,7 +532,7 @@ const DisasterDetails = () => {
                     </div>
                     <p className="text-sm mt-2">{verificationResult.analysis}</p>
                   </div>
-                )}
+                )} */}
               </div>
             )}
             
