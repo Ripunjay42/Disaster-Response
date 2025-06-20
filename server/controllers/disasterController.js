@@ -17,7 +17,7 @@ export const createDisaster = async (req, res) => {
       return res.status(400).json({ error: 'Title and description are required' });
     }
     
-    // Extract location if not provided
+    // Extract location if not provided and description is available
     let locationNameToUse = location_name;
     if (!locationNameToUse && description) {
       try {
