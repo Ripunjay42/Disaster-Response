@@ -12,7 +12,7 @@ const ResourceMap = ({ resources, disaster, height = "500px" }) => {
   useEffect(() => {
     if (!mapContainer.current) return;
 
-    // Get API key from .env file (Vite prepends with VITE_)
+    // Get API key from .env file (Vite prepends with VITE_) ajsgd
     mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
 
     // Set default location if disaster location not available
